@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SDN Packet Drop Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#0a0c10;--s0:#0d1117;--s1:#111620;--s2:#161c28;
+  --b0:#1c2535;--b1:#243040;
+  --c:#3dd6f5;--g:#2ecc71;--r:#e84057;--o:#f5a623;--y:#f7e463;--p:#9b7ff4;
+  --t:#d0ddf0;--td:#4a6080;--tm:#8aa0c0;
+  --gc:0 0 20px #3dd6f566;--gg:0 0 20px #2ecc7166;--gr:0 0 20px #e8405766;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px}
+body{background:var(--bg);color:var(--t);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden}
+
+/* grid texture */
+body::after{content:'';position:fixed;inset:0;background:
+  linear-gradient(rgba(61,214,245,.015) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(61,214,245,.015) 1px,transparent 1px);
+  background-size:48px 48px;pointer-events:none;z-index:0}
+
+/* ── HEADER ── */
+header{position:sticky;top:0;z-index:300;background:rgba(10,12,16,.92);
+  backdrop-filter:blur(16px);border-bottom:1px solid var(--b0);
+  padding:0 28px;height:60px;display:flex;align-items:center;gap:16px}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:34px;height:34px;border:2px solid var(--c);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.logo-mark::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(61,214,245,.15),transparent);animation:lglow 3s ease-in-out infinite}
+@keyframes lglow{0%,100%{opacity:.5}50%{opacity:1}}
+.logo-mark svg{width:18px;height:18px;color:var(--c)}
+.logo-text{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;
+  color:var(--c);letter-spacing:1px;text-shadow:0 0 24px var(--c)}
+.logo-text span{color:var(--g)}
+.logo-sub{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--td);
+  letter-spacing:2px;margin-left:1px}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.pill{display:flex;align-items:center;gap:6px;background:var(--s1);
+  border:1px solid var(--b0);border-radius:20px;padding:5px 12px;
+  font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--td)}
+.pill-dot{width:7px;height:7px;border-radius:50%;background:var(--td);transition:all .3s}
+.pill-dot.on{background:var(--g);box-shadow:var(--gg);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.pill-txt.on{color:var(--g)}
+.badge-sm{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:2px;
+  color:var(--td);border:1px solid var(--b1);border-radius:3px;padding:3px 8px}
+
+/* ── LAYOUT ── */
+.app{position:relative;z-index:1;display:grid;grid-template-columns:320px 1fr;
+  min-height:calc(100vh - 60px)}
+
+/* ── SIDEBAR ── */
+aside{background:var(--s0);border-right:1px solid var(--b0);
+  display:flex;flex-direction:column;overflow-y:auto;max-height:calc(100vh - 60px)}
+aside::-webkit-scrollbar{width:3px}
+aside::-webkit-scrollbar-thumb{background:var(--b1);border-radius:2px}
+
+.blk{padding:16px 18px;border-bottom:1px solid var(--b0)}
+.blk-hd{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;
+  letter-spacing:3px;color:var(--c);text-transform:uppercase;
+  display:flex;align-items:center;gap:6px;margin-bottom:12px}
+.blk-hd::before{content:'';width:2px;height:11px;background:var(--c);box-shadow:var(--gc)}
+
+/* stat cards */
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.sc{background:var(--s1);border:1px solid var(--b0);border-radius:5px;padding:10px 12px;position:relative;overflow:hidden}
+.sc::before{content:'';position:absolute;top:0;left:0;right:0;height:1.5px}
+.sc-c::before{background:var(--c)}.sc-g::before{background:var(--g)}
+.sc-r::before{background:var(--r)}.sc-o::before{background:var(--o)}
+.sc-lbl{font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--td);letter-spacing:2px;text-transform:uppercase}
+.sc-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;margin-top:3px;transition:color .4s}
+.sc-c .sc-val{color:var(--c)}.sc-g .sc-val{color:var(--g)}.sc-r .sc-val{color:var(--r)}.sc-o .sc-val{color:var(--o)}
+
+/* bar */
+.bar-wrap{margin-top:12px}
+.bar-hdr{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--td);margin-bottom:5px}
+.bar-track{height:5px;background:var(--s1);border:1px solid var(--b0);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--g),var(--y),var(--r));transition:width .6s ease}
+
+/* form fields */
+.f{display:flex;flex-direction:column;gap:4px;margin-top:7px}
+.f label{font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--td);letter-spacing:2px;text-transform:uppercase}
+.f input,.f select{background:var(--s1);border:1px solid var(--b0);border-radius:4px;
+  padding:7px 10px;color:var(--t);font-family:'JetBrains Mono',monospace;font-size:11px;outline:none;
+  transition:border-color .2s,box-shadow .2s;width:100%}
+.f input:focus,.f select:focus{border-color:var(--c);box-shadow:0 0 0 2px rgba(61,214,245,.1)}
+.f select option{background:var(--s0)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+
+/* buttons */
+.btn{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;letter-spacing:2px;
+  text-transform:uppercase;padding:9px 12px;border:none;border-radius:4px;cursor:pointer;transition:all .2s;width:100%}
+.btn-c{background:transparent;border:1px solid var(--c);color:var(--c)}
+.btn-c:hover{background:var(--c);color:var(--bg);box-shadow:var(--gc)}
+.btn-g{background:transparent;border:1px solid var(--g);color:var(--g)}
+.btn-g:hover{background:var(--g);color:var(--bg);box-shadow:var(--gg)}
+.btn-r{background:transparent;border:1px solid var(--r);color:var(--r)}
+.btn-r:hover{background:var(--r);color:#fff}
+.btn-d{background:transparent;border:1px solid var(--b1);color:var(--td)}
+.btn-d:hover{border-color:var(--tm);color:var(--t)}
+.btn-o{background:transparent;border:1px solid var(--o);color:var(--o)}
+.btn-o:hover{background:var(--o);color:var(--bg)}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}
+.mt7{margin-top:7px}.mt12{margin-top:12px}.full{width:100%;margin-top:7px}
+
+/* ── MAIN ── */
+main{display:flex;flex-direction:column;overflow-y:auto;max-height:calc(100vh - 60px)}
+main::-webkit-scrollbar{width:3px}
+main::-webkit-scrollbar-thumb{background:var(--b1)}
+
+/* tabs */
+.tabs{background:var(--s0);border-bottom:1px solid var(--b0);display:flex;padding:0 20px;
+  position:sticky;top:0;z-index:100;gap:2px}
+.tab{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;letter-spacing:2px;
+  padding:14px 14px;cursor:pointer;border-bottom:2px solid transparent;
+  color:var(--td);transition:all .2s;text-transform:uppercase}
+.tab:hover{color:var(--t)}.tab.active{color:var(--c);border-bottom-color:var(--c)}
+.tc{display:none;padding:20px;flex:1}.tc.active{display:block}
+
+/* tables */
+.tbl{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:10px}
+.tbl th{font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:2px;font-weight:700;
+  color:var(--td);text-transform:uppercase;padding:8px 10px;text-align:left;
+  border-bottom:1px solid var(--b0);background:var(--s0);white-space:nowrap}
+.tbl td{padding:8px 10px;border-bottom:1px solid rgba(28,37,53,.5);vertical-align:middle}
+.tbl tr:hover td{background:rgba(61,214,245,.02)}
+
+/* inline badges */
+.bx{padding:2px 7px;border-radius:3px;font-family:'JetBrains Mono',monospace;
+  font-size:7px;font-weight:700;letter-spacing:1px;display:inline-block}
+.bx-r{background:rgba(232,64,87,.1);color:var(--r);border:1px solid rgba(232,64,87,.2)}
+.bx-g{background:rgba(46,204,113,.1);color:var(--g);border:1px solid rgba(46,204,113,.2)}
+.bx-c{background:rgba(61,214,245,.1);color:var(--c);border:1px solid rgba(61,214,245,.2)}
+.bx-o{background:rgba(245,166,35,.1);color:var(--o);border:1px solid rgba(245,166,35,.2)}
+.bx-p{background:rgba(155,127,244,.1);color:var(--p);border:1px solid rgba(155,127,244,.2)}
+
+/* icon btn */
+.ib{background:none;border:1px solid var(--b0);color:var(--td);border-radius:3px;
+  padding:3px 7px;cursor:pointer;font-size:10px;transition:all .2s}
+.ib:hover{border-color:var(--r);color:var(--r)}
+
+/* event log */
+.evlog{display:flex;flex-direction:column;gap:1px;max-height:340px;overflow-y:auto}
+.evlog::-webkit-scrollbar{width:3px}
+.evlog::-webkit-scrollbar-thumb{background:var(--b1)}
+.ev-row{display:grid;grid-template-columns:60px 50px 1fr;gap:8px;align-items:center;
+  padding:5px 8px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:10px;
+  border-left:2px solid transparent;animation:evIn .2s ease}
+@keyframes evIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+.ev-row.DROP{border-left-color:var(--r);background:rgba(232,64,87,.04)}
+.ev-row.FLOW{border-left-color:var(--c);background:rgba(61,214,245,.03)}
+.ev-row.INFO{border-left-color:var(--g);background:rgba(46,204,113,.03)}
+.ev-row.API {border-left-color:var(--o);background:rgba(245,166,35,.03)}
+.ev-ts{color:var(--td);font-size:9px}
+.ev-lv{font-size:8px;font-weight:700}
+.ev-lv.DROP{color:var(--r)}.ev-lv.FLOW{color:var(--c)}.ev-lv.INFO{color:var(--g)}.ev-lv.API{color:var(--o)}
+.ev-msg{color:var(--tm);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* flow dump */
+.fdump{background:var(--s1);border:1px solid var(--b0);border-radius:4px;padding:10px;
+  font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--tm);
+  max-height:180px;overflow-y:auto;white-space:pre-wrap;margin-top:7px;line-height:1.6}
+.fdump::-webkit-scrollbar{width:3px}
+.fdump::-webkit-scrollbar-thumb{background:var(--b1)}
+
+/* info box */
+.info-box{background:var(--s1);border:1px solid var(--b0);border-radius:5px;padding:14px;margin-top:14px}
+.info-box-hd{font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:2px;
+  color:var(--td);text-transform:uppercase;margin-bottom:8px}
+.info-box p{font-size:12px;color:var(--td);line-height:1.7}
+
+/* chart */
+.cg2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.cbox{background:var(--s0);border:1px solid var(--b0);border-radius:6px;padding:14px}
+.cbox-hd{font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:2px;color:var(--td);text-transform:uppercase;margin-bottom:10px}
+canvas{width:100%!important}
+
+/* scenario buttons */
+.sg4{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}
+.sbtn{background:var(--s1);border:1px solid var(--b0);border-radius:5px;padding:13px;
+  cursor:pointer;transition:all .2s;text-align:left}
+.sbtn:hover{border-color:var(--c);background:rgba(61,214,245,.03);transform:translateY(-1px)}
+.sbtn-hd{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--c);margin-bottom:5px;font-weight:700}
+.sbtn-bd{font-size:11px;color:var(--td);line-height:1.5}
+
+/* regression */
+.reg-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.tc-row{background:var(--s0);border:1px solid var(--b0);border-radius:5px;
+  padding:12px 14px;display:grid;grid-template-columns:68px 1fr auto;gap:12px;
+  align-items:center;margin-bottom:8px;transition:border-color .2s}
+.tc-row.PASS{border-left:2px solid var(--g)}.tc-row.FAIL{border-left:2px solid var(--r)}
+.tc-id{font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--td);letter-spacing:1px}
+.tc-name{font-weight:500;font-size:13px;margin-bottom:2px}
+.tc-desc{font-size:11px;color:var(--td)}
+.tc-ev{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--td);margin-top:4px}
+.ts-p{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:2px;
+  padding:5px 10px;border-radius:3px;color:var(--g);border:1px solid rgba(46,204,113,.25);background:rgba(46,204,113,.07)}
+.ts-f{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:2px;
+  padding:5px 10px;border-radius:3px;color:var(--r);border:1px solid rgba(232,64,87,.25);background:rgba(232,64,87,.07)}
+
+/* topology */
+.topo-box{background:var(--s0);border:1px solid var(--b0);border-radius:7px;padding:14px;margin-bottom:14px}
+.topo-hd{font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:2px;color:var(--td);text-transform:uppercase;margin-bottom:10px}
+.hcards{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-top:7px}
+.hcard{background:var(--s1);border:1px solid var(--b0);border-radius:4px;padding:9px;text-align:center}
+.hcard-n{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--c);font-weight:700;margin-bottom:3px}
+.hcard-i{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--td)}
+
+/* MAC table */
+.mac-grid{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.mac-row{display:grid;grid-template-columns:80px 1fr 60px;gap:8px;
+  padding:5px 8px;background:var(--s1);border:1px solid var(--b0);border-radius:3px;
+  font-family:'JetBrains Mono',monospace;font-size:10px}
+
+/* toast */
+#toast{position:fixed;bottom:18px;right:18px;background:var(--s1);border:1px solid var(--b0);
+  border-radius:5px;padding:9px 16px;font-family:'JetBrains Mono',monospace;font-size:10px;
+  transform:translateY(60px);opacity:0;transition:all .3s;z-index:9999;max-width:280px}
+#toast.show{transform:none;opacity:1}
+#toast.s{border-left:2px solid var(--g);color:var(--g)}
+#toast.e{border-left:2px solid var(--r);color:var(--r)}
+#toast.i{border-left:2px solid var(--c);color:var(--c)}
+#toast.w{border-left:2px solid var(--o);color:var(--o)}
+
+.empty{text-align:center;padding:30px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--td)}
+@keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.ok{color:var(--g)!important}.wc{color:var(--y)!important}.bad{color:var(--r)!important}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">SDN DROP <span>SIM</span></div>
+      <div class="logo-sub">MININET · RYU · OPENFLOW 1.3</div>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <div class="pill">
+      <div class="pill-dot" id="ndot"></div>
+      <span class="pill-txt" id="nlbl">CONTROLLER OFFLINE</span>
+    </div>
+    <div class="pill">
+      <span id="swCount" style="color:var(--c);font-family:'JetBrains Mono',monospace">0</span>
+      <span style="margin-left:4px">SWITCHES</span>
+    </div>
+    <div class="badge-sm">COMPUTER NETWORKS PROJECT</div>
+  </div>
+</header>
+
+<div class="app">
+
+<!-- ══════════ SIDEBAR ══════════ -->
+<aside>
+
+  <!-- Stats -->
+  <div class="blk">
+    <div class="blk-hd">Controller Stats</div>
+    <div class="sg">
+      <div class="sc sc-c"><div class="sc-lbl">Packet-In</div><div class="sc-val" id="sPktIn">0</div></div>
+      <div class="sc sc-g"><div class="sc-lbl">Forwarded</div><div class="sc-val" id="sFwd">0</div></div>
+      <div class="sc sc-r"><div class="sc-lbl">Dropped</div><div class="sc-val" id="sDrop">0</div></div>
+      <div class="sc sc-o"><div class="sc-lbl">Flow Mods</div><div class="sc-val" id="sFM">0</div></div>
+    </div>
+    <div class="bar-wrap">
+      <div class="bar-hdr"><span>DROP RATE</span><span id="drlbl" style="color:var(--o)">0.00%</span></div>
+      <div class="bar-track"><div class="bar-fill" id="drfill"></div></div>
+    </div>
+  </div>
+
+  <!-- Install rule -->
+  <div class="blk">
+    <div class="blk-hd">Install Drop Rule</div>
+    <div class="f"><label>Rule Name</label><input id="rName" type="text" placeholder="e.g. Block SSH"/></div>
+    <div class="g2">
+      <div class="f"><label>Protocol</label>
+        <select id="rProto"><option value="">Any</option><option>ICMP</option><option>TCP</option><option>UDP</option></select>
+      </div>
+      <div class="f"><label>Dst Port</label><input id="rDstPort" type="number" placeholder="any"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label>Src IP</label><input id="rSrcIp" type="text" placeholder="10.0.0.x"/></div>
+      <div class="f"><label>Dst IP</label><input id="rDstIp" type="text" placeholder="10.0.0.x"/></div>
+    </div>
+    <div class="g2">
+      <div class="f"><label>Priority</label><input id="rPri" type="number" value="200"/></div>
+      <div class="f"><label>Hard Timeout</label><input id="rTimeout" type="number" value="0" placeholder="0=perm"/></div>
+    </div>
+    <button class="btn btn-c full" onclick="installRule()">⊕ PUSH TO RYU CONTROLLER</button>
+  </div>
+
+  <!-- Quick scenarios -->
+  <div class="blk">
+    <div class="blk-hd">Quick Scenarios</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+      <button class="btn btn-r" onclick="loadScene('block_icmp')">🔴 BLOCK ALL ICMP (PING)</button>
+      <button class="btn btn-o" onclick="loadScene('block_http')">🟠 BLOCK HTTP TCP:80</button>
+      <button class="btn btn-o" onclick="loadScene('block_dns')">🟠 BLOCK DNS UDP:53</button>
+      <button class="btn btn-r" onclick="loadScene('block_h3')">🔴 ISOLATE HOST h3</button>
+      <button class="btn btn-d" onclick="loadScene('block_ssh')">⬛ BLOCK SSH TCP:22</button>
+    </div>
+  </div>
+
+  <!-- Regression -->
+  <div class="blk">
+    <div class="blk-hd">Regression Tests</div>
+    <p style="font-size:11px;color:var(--td);line-height:1.6;margin-bottom:9px">
+      6 automated tests verify controller state, MAC learning, rule persistence, and packet counters.
+    </p>
+    <button class="btn btn-c full" onclick="runReg(); switchTab('tab-reg')">⚙ RUN REGRESSION SUITE</button>
+  </div>
+
+</aside>
+
+<!-- ══════════ MAIN ══════════ -->
+<main>
+  <div class="tabs">
+    <div class="tab active" id="tab-rules"    onclick="switchTab('tab-rules')">Flow Rules</div>
+    <div class="tab"        id="tab-events"   onclick="switchTab('tab-events')">Event Log</div>
+    <div class="tab"        id="tab-charts"   onclick="switchTab('tab-charts')">Analytics</div>
+    <div class="tab"        id="tab-mac"      onclick="switchTab('tab-mac')">MAC Table</div>
+    <div class="tab"        id="tab-topology" onclick="switchTab('tab-topology')">Topology</div>
+    <div class="tab"        id="tab-flowtbl"  onclick="switchTab('tab-flowtbl')">OVS Flows</div>
+    <div class="tab"        id="tab-reg"      onclick="switchTab('tab-reg')">Regression</div>
+  </div>
+
+  <!-- ── FLOW RULES ── -->
+  <div class="tc active" id="tab-rules">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--td)">
+        DROP RULES — RYU CONTROLLER · OPENFLOW 1.3
+      </span>
+      <div style="display:flex;gap:7px">
+        <button class="btn btn-d" style="width:auto;padding:5px 12px" onclick="clearRules()">✕ CLEAR ALL</button>
+        <button class="btn btn-c" style="width:auto;padding:5px 12px" onclick="loadRules()">↺ REFRESH</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr>
+          <th>Rule Name</th><th>Protocol</th><th>Src IP</th><th>Dst IP</th>
+          <th>Dst Port</th><th>Priority</th><th>Timeout</th><th>Hit Count</th><th>Installed</th><th>Del</th>
+        </tr></thead>
+        <tbody id="rulesTbody">
+          <tr><td colspan="10" class="empty">No drop rules installed yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="info-box">
+      <div class="info-box-hd">HOW THE RYU CONTROLLER WORKS</div>
+      <p>
+        The <strong style="color:var(--c)">Ryu controller</strong> handles every
+        <code style="color:var(--c)">packet_in</code> event:
+        <br><br>
+        <strong style="color:var(--g)">1. MAC Learning</strong> — source MAC ↔ port mapping stored per switch.<br>
+        <strong style="color:var(--r)">2. Drop Check</strong> — if packet matches a drop rule,
+        a <code style="color:var(--r)">flow_mod(actions=[])</code> is pushed and packet discarded.<br>
+        <strong style="color:var(--g)">3. Forward</strong> — if dst MAC known, install forwarding flow (priority=10, idle_timeout=10s); else flood.<br><br>
+        Drop flows use <strong style="color:var(--y)">empty actions list</strong> = OpenFlow DROP.
+        Priority 200 ensures they override forwarding rules (priority=10).
+      </p>
+    </div>
+  </div>
+
+  <!-- ── EVENT LOG ── -->
+  <div class="tc" id="tab-events">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--td)">CONTROLLER EVENT LOG — LIVE FEED</span>
+      <div style="display:flex;align-items:center;gap:7px">
+        <div style="width:6px;height:6px;border-radius:50%;background:var(--g);box-shadow:var(--gg);animation:pulse 1.5s ease-in-out infinite"></div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--g)">STREAMING</span>
+      </div>
+    </div>
+    <div class="evlog" id="evlog"><div class="empty">Controller events will appear here...</div></div>
+  </div>
+
+  <!-- ── ANALYTICS ── -->
+  <div class="tc" id="tab-charts">
+    <div class="cg2">
+      <div class="cbox"><div class="cbox-hd">Forwarded vs Dropped</div><canvas id="cpie" height="200"></canvas></div>
+      <div class="cbox"><div class="cbox-hd">Drop Rate Over Time</div><canvas id="cline" height="200"></canvas></div>
+      <div class="cbox"><div class="cbox-hd">Per-Rule Hit Count</div><canvas id="cbar" height="200"></canvas></div>
+      <div class="cbox"><div class="cbox-hd">Flow Mod Count</div><canvas id="cfm" height="200"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ── MAC TABLE ── -->
+  <div class="tc" id="tab-mac">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:13px">
+      MAC LEARNING TABLE — POPULATED BY CONTROLLER packet_in HANDLER
+    </div>
+    <div id="macTableWrap"><div class="empty">Send traffic to populate the MAC learning table.</div></div>
+    <div class="info-box">
+      <div class="info-box-hd">MAC LEARNING SWITCH LOGIC</div>
+      <p>On every <code style="color:var(--c)">packet_in</code> event the controller reads
+      <code style="color:var(--c)">src_mac</code> and <code style="color:var(--c)">in_port</code>
+      and stores them: <code style="color:var(--y)">mac_table[dpid][src_mac] = in_port</code>.
+      When a packet arrives for a <em>known</em> dst MAC, the controller installs a
+      forwarding flow and sends the packet out the correct port.
+      Unknown dst MACs are <strong style="color:var(--o)">flooded</strong> to all ports.</p>
+    </div>
+  </div>
+
+  <!-- ── TOPOLOGY ── -->
+  <div class="tc" id="tab-topology">
+    <div class="topo-box">
+      <div class="topo-hd">MININET TOPOLOGY — 3 OVS SWITCHES · 5 HOSTS · RYU REMOTE CONTROLLER</div>
+      <svg viewBox="0 0 860 340" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-height:310px">
+        <defs>
+          <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <filter id="gs"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <marker id="ma" markerWidth="6" markerHeight="6" refX="5" refY="2.5" orient="auto"><path d="M0,0 L0,5 L6,2.5 z" fill="#1c2535"/></marker>
+          <marker id="mc" markerWidth="6" markerHeight="6" refX="5" refY="2.5" orient="auto"><path d="M0,0 L0,5 L6,2.5 z" fill="#3dd6f5"/></marker>
+        </defs>
+        <!-- Ryu Controller -->
+        <rect x="310" y="14" width="240" height="54" rx="5" fill="#0d1117" stroke="#3dd6f5" stroke-width="1.5" filter="url(#glow)"/>
+        <text x="430" y="34" text-anchor="middle" fill="#3dd6f5" font-family="JetBrains Mono,monospace" font-size="9" letter-spacing="2" font-weight="700">RYU CONTROLLER</text>
+        <text x="430" y="48" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">OpenFlow 1.3 · 127.0.0.1:6633</text>
+        <text x="430" y="60" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="7">packet_in handler · MAC learning · DROP rules</text>
+        <!-- control plane lines -->
+        <line x1="430" y1="68" x2="200" y2="148" stroke="#3dd6f5" stroke-width="1" stroke-dasharray="5,4" opacity=".4" marker-end="url(#mc)"/>
+        <line x1="430" y1="68" x2="430" y2="143" stroke="#3dd6f5" stroke-width="1" stroke-dasharray="5,4" opacity=".4" marker-end="url(#mc)"/>
+        <line x1="430" y1="68" x2="660" y2="148" stroke="#3dd6f5" stroke-width="1" stroke-dasharray="5,4" opacity=".4" marker-end="url(#mc)"/>
+        <!-- Switches -->
+        <rect x="118" y="143" width="164" height="58" rx="4" fill="#0d1117" stroke="#2ecc71" stroke-width="1.5" filter="url(#gs)"/>
+        <text x="200" y="163" text-anchor="middle" fill="#2ecc71" font-family="JetBrains Mono,monospace" font-size="9" letter-spacing="2" font-weight="700">SWITCH s1</text>
+        <text x="200" y="177" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">OVSKernelSwitch</text>
+        <text x="200" y="190" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="7">dpid=1  OF1.3  port=6633</text>
+        <rect x="348" y="143" width="164" height="58" rx="4" fill="#0d1117" stroke="#2ecc71" stroke-width="1.5" filter="url(#gs)"/>
+        <text x="430" y="163" text-anchor="middle" fill="#2ecc71" font-family="JetBrains Mono,monospace" font-size="9" letter-spacing="2" font-weight="700">SWITCH s2</text>
+        <text x="430" y="177" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">OVSKernelSwitch</text>
+        <text x="430" y="190" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="7">dpid=2  OF1.3  port=6633</text>
+        <rect x="578" y="143" width="164" height="58" rx="4" fill="#0d1117" stroke="#2ecc71" stroke-width="1.5" filter="url(#gs)"/>
+        <text x="660" y="163" text-anchor="middle" fill="#2ecc71" font-family="JetBrains Mono,monospace" font-size="9" letter-spacing="2" font-weight="700">SWITCH s3</text>
+        <text x="660" y="177" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">OVSKernelSwitch</text>
+        <text x="660" y="190" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="7">dpid=3  OF1.3  port=6633</text>
+        <!-- S-S links -->
+        <line x1="282" y1="170" x2="348" y2="170" stroke="#1c2535" stroke-width="2.5" marker-end="url(#ma)"/>
+        <line x1="348" y1="178" x2="282" y2="178" stroke="#1c2535" stroke-width="2.5" marker-end="url(#ma)"/>
+        <line x1="512" y1="170" x2="578" y2="170" stroke="#1c2535" stroke-width="2.5" marker-end="url(#ma)"/>
+        <line x1="578" y1="178" x2="512" y2="178" stroke="#1c2535" stroke-width="2.5" marker-end="url(#ma)"/>
+        <!-- Hosts h1 h2 h3 -->
+        <rect x="30"  y="268" width="82" height="44" rx="3" fill="#0a0c10" stroke="#1c2535" stroke-width="1"/>
+        <text x="71"  y="285" text-anchor="middle" fill="#d0ddf0" font-family="JetBrains Mono,monospace" font-size="9" font-weight="700">h1</text>
+        <text x="71"  y="298" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">10.0.0.1</text>
+        <text x="71"  y="308" text-anchor="middle" fill="#1c2535" font-family="JetBrains Mono,monospace" font-size="7">100M 5ms</text>
+        <rect x="158" y="268" width="82" height="44" rx="3" fill="#0a0c10" stroke="#1c2535" stroke-width="1"/>
+        <text x="199" y="285" text-anchor="middle" fill="#d0ddf0" font-family="JetBrains Mono,monospace" font-size="9" font-weight="700">h2</text>
+        <text x="199" y="298" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">10.0.0.2</text>
+        <text x="199" y="308" text-anchor="middle" fill="#1c2535" font-family="JetBrains Mono,monospace" font-size="7">100M 5ms</text>
+        <rect x="286" y="268" width="82" height="44" rx="3" fill="#0a0c10" stroke="#1c2535" stroke-width="1"/>
+        <text x="327" y="285" text-anchor="middle" fill="#d0ddf0" font-family="JetBrains Mono,monospace" font-size="9" font-weight="700">h3</text>
+        <text x="327" y="298" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">10.0.0.3</text>
+        <text x="327" y="308" text-anchor="middle" fill="#1c2535" font-family="JetBrains Mono,monospace" font-size="7">100M 5ms</text>
+        <line x1="71"  y1="268" x2="163" y2="201" stroke="#1c2535" stroke-width="1.2" marker-end="url(#ma)"/>
+        <line x1="199" y1="268" x2="200" y2="201" stroke="#1c2535" stroke-width="1.2" marker-end="url(#ma)"/>
+        <line x1="327" y1="268" x2="237" y2="201" stroke="#1c2535" stroke-width="1.2" marker-end="url(#ma)"/>
+        <!-- h4 under s2 -->
+        <rect x="389" y="268" width="82" height="44" rx="3" fill="#0a0c10" stroke="#1c2535" stroke-width="1"/>
+        <text x="430" y="285" text-anchor="middle" fill="#d0ddf0" font-family="JetBrains Mono,monospace" font-size="9" font-weight="700">h4</text>
+        <text x="430" y="298" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">10.0.0.4</text>
+        <line x1="430" y1="268" x2="430" y2="201" stroke="#1c2535" stroke-width="1.2" marker-end="url(#ma)"/>
+        <!-- h5 under s3 -->
+        <rect x="619" y="268" width="82" height="44" rx="3" fill="#0a0c10" stroke="#1c2535" stroke-width="1"/>
+        <text x="660" y="285" text-anchor="middle" fill="#d0ddf0" font-family="JetBrains Mono,monospace" font-size="9" font-weight="700">h5</text>
+        <text x="660" y="298" text-anchor="middle" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">10.0.0.5</text>
+        <line x1="660" y1="268" x2="660" y2="201" stroke="#1c2535" stroke-width="1.2" marker-end="url(#ma)"/>
+        <!-- animated packets -->
+        <circle r="4" fill="#2ecc71" opacity=".9" filter="url(#gs)">
+          <animateMotion dur="3.5s" repeatCount="indefinite" path="M71,290 L200,172 L430,172 L430,289"/>
+          <animate attributeName="opacity" values="0;1;1;1;0" dur="3.5s" repeatCount="indefinite"/>
+        </circle>
+        <circle r="4" fill="#e84057" opacity=".9" filter="url(#gs)">
+          <animateMotion dur="2s" repeatCount="indefinite" begin="1.2s" path="M327,289 L200,172"/>
+          <animate attributeName="opacity" values="0;0;1;1;0" dur="2s" repeatCount="indefinite" begin="1.2s"/>
+        </circle>
+        <!-- legend -->
+        <line x1="28" y1="330" x2="50" y2="330" stroke="#3dd6f5" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="55" y="334" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">Control Plane</text>
+        <line x1="172" y1="330" x2="194" y2="330" stroke="#1c2535" stroke-width="2"/>
+        <text x="199" y="334" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">Data Plane</text>
+        <circle cx="330" cy="330" r="4" fill="#2ecc71"/>
+        <text x="339" y="334" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">Forwarded</text>
+        <circle cx="440" cy="330" r="4" fill="#e84057"/>
+        <text x="449" y="334" fill="#4a6080" font-family="JetBrains Mono,monospace" font-size="8">Dropped</text>
+      </svg>
+    </div>
+    <div class="hcards">
+      <div class="hcard"><div class="hcard-n">h1</div><div class="hcard-i">10.0.0.1/24</div></div>
+      <div class="hcard"><div class="hcard-n">h2</div><div class="hcard-i">10.0.0.2/24</div></div>
+      <div class="hcard"><div class="hcard-n">h3</div><div class="hcard-i">10.0.0.3/24</div></div>
+      <div class="hcard"><div class="hcard-n">h4</div><div class="hcard-i">10.0.0.4/24</div></div>
+      <div class="hcard"><div class="hcard-n">h5</div><div class="hcard-i">10.0.0.5/24</div></div>
+    </div>
+    <div class="info-box" style="margin-top:12px">
+      <div class="info-box-hd">TOPOLOGY DETAILS</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+        <div><div style="color:var(--c);font-family:'JetBrains Mono',monospace;font-size:8px;margin-bottom:5px">CONTROLLER</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--td);line-height:1.8">Ryu RemoteController<br>IP: 127.0.0.1:6633<br>OF version: 1.3<br>API: Flask :5000</div></div>
+        <div><div style="color:var(--g);font-family:'JetBrains Mono',monospace;font-size:8px;margin-bottom:5px">SWITCHES</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--td);line-height:1.8">3× OVSKernelSwitch<br>s1-s3, OpenFlow 1.3<br>Partial mesh<br>Kernel datapath</div></div>
+        <div><div style="color:var(--o);font-family:'JetBrains Mono',monospace;font-size:8px;margin-bottom:5px">LINKS</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--td);line-height:1.8">H↔S: 100Mbps, 5ms<br>S↔S: 1Gbps, 2ms<br>Loss: 0% (TCLink)<br>Drop: OVS flow only</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── OVS FLOW TABLE ── -->
+  <div class="tc" id="tab-flowtbl">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:13px">
+      LIVE OVS FLOW TABLE DUMP — ovs-ofctl -O OpenFlow13 dump-flows
+    </div>
+    <div id="ftWrap"><div class="empty">Flow table data not yet available.</div></div>
+  </div>
+
+  <!-- ── REGRESSION ── -->
+  <div class="tc" id="tab-reg">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--td)">REGRESSION TEST SUITE</span>
+      <button class="btn btn-c" style="width:auto;padding:6px 14px" onclick="runReg()">⚙ RE-RUN</button>
+    </div>
+    <div class="reg-sum" id="regSum" style="display:none">
+      <div class="sc sc-c"><div class="sc-lbl">Total</div><div class="sc-val" id="rt">0</div></div>
+      <div class="sc sc-g"><div class="sc-lbl">Passed</div><div class="sc-val" id="rp">0</div></div>
+      <div class="sc sc-r"><div class="sc-lbl">Failed</div><div class="sc-val" id="rf">0</div></div>
+      <div class="sc sc-o"><div class="sc-lbl">Pass Rate</div><div class="sc-val" id="rr">—</div></div>
+    </div>
+    <div id="testGrid"><div class="empty">Click "Run Regression Suite" to verify controller state.</div></div>
+  </div>
+
+</main>
+</div>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const API='http://localhost:5000/api';
+Chart.defaults.color='#4a6080';Chart.defaults.borderColor='#1c2535';
+Chart.defaults.font.family="'JetBrains Mono',monospace";
+const co={responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:'#4a6080',font:{size:9}}}}};
+
+const pieChart=new Chart(document.getElementById('cpie').getContext('2d'),{type:'doughnut',
+  data:{labels:['Forwarded','Dropped'],datasets:[{data:[0,0],
+    backgroundColor:['rgba(46,204,113,.6)','rgba(232,64,87,.6)'],
+    borderColor:['#2ecc71','#e84057'],borderWidth:1}]},options:{...co,cutout:'60%'}});
+
+const lh={labels:[],data:[]};
+const lineChart=new Chart(document.getElementById('cline').getContext('2d'),{type:'line',
+  data:{labels:lh.labels,datasets:[{label:'Drop Rate %',data:lh.data,
+    borderColor:'#f5a623',backgroundColor:'rgba(245,166,35,.07)',tension:.4,fill:true,pointRadius:2}]},
+  options:{...co,scales:{y:{min:0,max:100,grid:{color:'#1c2535'},ticks:{callback:v=>v+'%',color:'#4a6080'}},
+    x:{grid:{color:'#1c2535'},ticks:{color:'#4a6080'}}}}});
+
+const barChart=new Chart(document.getElementById('cbar').getContext('2d'),{type:'bar',
+  data:{labels:[],datasets:[{label:'Hits',data:[],backgroundColor:'rgba(232,64,87,.4)',borderColor:'#e84057',borderWidth:1}]},
+  options:{...co,scales:{y:{grid:{color:'#1c2535'},ticks:{color:'#4a6080'}},
+    x:{grid:{color:'#1c2535'},ticks:{color:'#4a6080',maxRotation:30}}}}});
+
+const fmHistory={labels:[],data:[]};
+const fmChart=new Chart(document.getElementById('cfm').getContext('2d'),{type:'line',
+  data:{labels:fmHistory.labels,datasets:[{label:'Flow Mods',data:fmHistory.data,
+    borderColor:'#3dd6f5',backgroundColor:'rgba(61,214,245,.07)',tension:.3,fill:true,pointRadius:2}]},
+  options:{...co,scales:{y:{grid:{color:'#1c2535'},ticks:{color:'#4a6080'}},
+    x:{grid:{color:'#1c2535'},ticks:{color:'#4a6080'}}}}});
+
+let pollN=0;
+
+function toast(m,t='i'){const el=document.getElementById('toast');el.textContent=m;el.className=`show ${t}`;setTimeout(()=>el.className='',2800)}
+
+function switchTab(id){
+  document.querySelectorAll('.tc').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.tab').forEach(e=>{if(e.getAttribute('onclick')?.includes(id))e.classList.add('active');});
+}
+
+async function checkStatus(){
+  try{const r=await fetch(`${API}/status`);const d=await r.json();
+    const dot=document.getElementById('ndot'),lbl=document.getElementById('nlbl');
+    if(d.running){dot.classList.add('on');lbl.classList.add('on');lbl.textContent='CONTROLLER ONLINE';}
+    document.getElementById('swCount').textContent=d.num_switches||0;
+  }catch(e){document.getElementById('nlbl').textContent='CONTROLLER OFFLINE';}
+}
+
+async function pollStats(){
+  try{
+    const r=await fetch(`${API}/stats`);const s=await r.json();
+    document.getElementById('sPktIn').textContent=s.total_in||0;
+    document.getElementById('sFwd').textContent=s.total_forwarded||0;
+    document.getElementById('sDrop').textContent=s.total_dropped||0;
+    document.getElementById('sFM').textContent=s.flow_mods_sent||0;
+    const dr=s.drop_rate||0;
+    document.getElementById('drlbl').textContent=dr.toFixed(2)+'%';
+    document.getElementById('drfill').style.width=Math.min(dr,100)+'%';
+    pieChart.data.datasets[0].data=[s.total_forwarded||0,s.total_dropped||0];pieChart.update('none');
+    if(pollN%4===0){
+      const now=new Date().toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      lh.labels.push(now);lh.data.push(dr);if(lh.labels.length>30){lh.labels.shift();lh.data.shift();}
+      lineChart.update('none');
+      fmHistory.labels.push(now);fmHistory.data.push(s.flow_mods_sent||0);
+      if(fmHistory.labels.length>30){fmHistory.labels.shift();fmHistory.data.shift();}
+      fmChart.update('none');
+    }
+    pollN++;
+  }catch(e){}
+}
+
+async function loadRules(){
+  try{const r=await fetch(`${API}/rules`);const rules=await r.json();
+    const tb=document.getElementById('rulesTbody');
+    if(!rules.length){tb.innerHTML='<tr><td colspan="10" class="empty">No drop rules installed.</td></tr>';
+      barChart.data.labels=[];barChart.data.datasets[0].data=[];barChart.update('none');return;}
+    tb.innerHTML=rules.map(r=>{
+      const ts=r.installed_at?r.installed_at.split('T')[1]?.split('.')[0]:'—';
+      const proto=r.ip_proto?`<span class="bx bx-r">${r.ip_proto}</span>`:'<span class="bx bx-c">ANY</span>';
+      return`<tr>
+        <td style="font-weight:500">${r.name}</td>
+        <td>${proto}</td>
+        <td style="font-family:'JetBrains Mono',monospace;color:var(--c)">${r.src_ip||'*'}</td>
+        <td style="font-family:'JetBrains Mono',monospace;color:var(--c)">${r.dst_ip||'*'}</td>
+        <td style="font-family:'JetBrains Mono',monospace;color:var(--td)">${r.tp_dst||'*'}</td>
+        <td><span style="color:var(--y);font-family:'JetBrains Mono',monospace;font-size:11px">${r.priority}</span></td>
+        <td style="font-family:'JetBrains Mono',monospace;color:var(--td)">${r.hard_timeout||'∞'}</td>
+        <td><span style="color:var(--r);font-family:'JetBrains Mono',monospace;font-size:11px">${r.hit_count||0}</span></td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--td)">${ts}</td>
+        <td><button class="ib" onclick="delRule('${r.rule_id}')">✕</button></td>
+      </tr>`;}).join('');
+    // Update bar chart
+    barChart.data.labels=rules.map(r=>r.name.length>14?r.name.slice(0,14)+'…':r.name);
+    barChart.data.datasets[0].data=rules.map(r=>r.hit_count||0);
+    barChart.update('none');
+  }catch(e){toast('Cannot reach controller','e');}
+}
+
+async function installRule(){
+  const body={name:document.getElementById('rName').value||'Drop Rule',
+    ip_proto:document.getElementById('rProto').value,
+    tp_dst:document.getElementById('rDstPort').value,
+    src_ip:document.getElementById('rSrcIp').value,
+    dst_ip:document.getElementById('rDstIp').value,
+    priority:document.getElementById('rPri').value,
+    hard_timeout:document.getElementById('rTimeout').value};
+  try{const r=await fetch(`${API}/rules`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();if(d.success){toast(`Rule "${body.name}" pushed to Ryu`,'s');loadRules();
+      ['rName','rDstPort','rSrcIp','rDstIp'].forEach(i=>document.getElementById(i).value='');}
+  }catch(e){toast('Cannot reach controller','e');}
+}
+
+async function delRule(id){
+  try{await fetch(`${API}/rules/${id}`,{method:'DELETE'});toast('Rule removed','i');loadRules();}catch(e){}
+}
+
+async function clearRules(){
+  const rules=(await (await fetch(`${API}/rules`)).json());
+  for(const r of rules) await fetch(`${API}/rules/${r.rule_id}`,{method:'DELETE'});
+  toast('All rules cleared','i');loadRules();
+}
+
+async function loadScene(name){
+  try{const r=await fetch(`${API}/demo/${name}`,{method:'POST'});
+    const d=await r.json();if(d.success){toast(`Scenario loaded: ${d.rule.name}`,'s');loadRules();switchTab('tab-rules');}
+  }catch(e){toast('Cannot reach controller','e');}
+}
+
+async function loadEvents(){
+  try{const r=await fetch(`${API}/events?limit=60`);const evs=await r.json();
+    const el=document.getElementById('evlog');
+    if(!evs.length){el.innerHTML='<div class="empty">No events yet.</div>';return;}
+    el.innerHTML=evs.map(e=>`<div class="ev-row ${e.level}">
+      <span class="ev-ts">${e.time}</span>
+      <span class="ev-lv ${e.level}">${e.level}</span>
+      <span class="ev-msg">${e.msg}</span>
+    </div>`).join('');
+  }catch(e){}
+}
+
+async function loadMacTable(){
+  try{const r=await fetch(`${API}/mac_table`);const d=await r.json();
+    const wrap=document.getElementById('macTableWrap');
+    const entries=Object.entries(d).flatMap(([dpid,macs])=>
+      Object.entries(macs).map(([mac,port])=>({dpid,mac,port})));
+    if(!entries.length){wrap.innerHTML='<div class="empty">No MAC entries yet. Send traffic first.</div>';return;}
+    wrap.innerHTML=`<div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--td);margin-bottom:8px">DPID — MAC ADDRESS — PORT</div>`+
+      entries.map(e=>`<div class="mac-row">
+        <span style="color:var(--c)">${e.dpid}</span>
+        <span style="color:var(--t)">${e.mac}</span>
+        <span style="color:var(--g)">Port ${e.port}</span>
+      </div>`).join('');
+  }catch(e){}
+}
+
+async function loadFlowTable(){
+  try{const r=await fetch(`${API}/flowtable`);const d=await r.json();
+    const wrap=document.getElementById('ftWrap');
+    if(!Object.keys(d).length){wrap.innerHTML='<div class="empty">No flow table data yet.</div>';return;}
+    wrap.innerHTML=Object.entries(d).map(([dpid,flows])=>`
+      <div style="margin-bottom:14px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--g);margin-bottom:6px">
+          SWITCH dpid=${dpid} — ${flows.length} flow(s)
+        </div>
+        <div class="fdump">${flows.length?flows.join('\n'):'(no flows recorded yet)'}</div>
+      </div>`).join('');
+  }catch(e){}
+}
+
+async function runReg(){
+  toast('Running regression tests...','i');
+  try{const r=await fetch(`${API}/regression`,{method:'POST'});const d=await r.json();
+    const s=d.summary;document.getElementById('regSum').style.display='grid';
+    document.getElementById('rt').textContent=s.total;document.getElementById('rp').textContent=s.passed;
+    document.getElementById('rf').textContent=s.failed;document.getElementById('rr').textContent=s.pass_rate+'%';
+    document.getElementById('testGrid').innerHTML=d.results.map(t=>`
+      <div class="tc-row ${t.status}">
+        <div class="tc-id">${t.test_id}</div>
+        <div><div class="tc-name">${t.name}</div><div class="tc-desc">${t.description}</div>
+          <div class="tc-ev">Expected: <span style="color:var(--c)">${t.expected}</span>
+            &nbsp;·&nbsp;Actual: <span style="color:var(--y)">${t.actual}</span></div></div>
+        <div class="${t.status==='PASS'?'ts-p':'ts-f'}">${t.status}</div>
+      </div>`).join('');
+    toast(`${s.passed}/${s.total} passed`,s.failed===0?'s':'e');
+  }catch(e){toast('Cannot reach controller','e');}
+}
+
+// Poll everything
+checkStatus();
+setInterval(checkStatus, 4000);
+setInterval(pollStats, 1000);
+setInterval(loadRules, 3000);
+setInterval(loadEvents, 1500);
+setInterval(loadMacTable, 3000);
+setInterval(loadFlowTable, 5000);
+pollStats();loadRules();loadEvents();
+</script>
+</body>
+</html>
